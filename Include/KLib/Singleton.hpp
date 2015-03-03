@@ -1,7 +1,5 @@
 #pragma once
 
-#include <sstream>
-
 #include <KLib/Exports.hpp>
 #include <KLib/String.hpp>
 #include <KLib/Logging.hpp>

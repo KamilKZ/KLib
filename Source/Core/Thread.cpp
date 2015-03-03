@@ -30,7 +30,6 @@ bool Thread::Start()
 		mRunning = true;
 		mThread = std::thread(&Thread::Run, this);
 
-		KL_LOG(klib::logging::LogLevel::DEBUGGING, "test");
 		KL_WARNING("Thread", "Created a new thread (" + ToHexString(mThread.get_id().hash()) + ")");
 	
 		return true;

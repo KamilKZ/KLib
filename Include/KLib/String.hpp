@@ -7,6 +7,7 @@
 #include <KLib/ArrayList.hpp>
 #include <KLib/Number.hpp>
 
+#include <sstream>
 #include <string>
 
 namespace klib

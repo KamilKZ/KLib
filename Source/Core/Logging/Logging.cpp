@@ -1,6 +1,7 @@
 
 #include <KLib/Time.hpp>
 #include <KLib/Logging.hpp>
+#include <KLib/File.hpp>
 
 namespace klib
 {
@@ -29,7 +30,7 @@ void Logger::Log(LogLevel level, String message, String func, String file, UInt 
 
 bool ErrorMessenger::Log(LogEntry entry)
 {
-	if (entry.level >= LogLevel::ERROR)
+	if (entry.level >= LogLevel::ERROR_LOG)
 	{
 		//display error box
 		return false;
@@ -38,9 +39,9 @@ bool ErrorMessenger::Log(LogEntry entry)
 
 LogFileWriter::LogFileWriter(String logFileName)
 {
-	if (logFile.Open(logFileName))
+	if (logFile.Open(logFileName, std::ios::app))
 	{
-		logFile.SetPointer(logFile.Length());
+		logFile.Seek(logFile.GetSize());
 	}
 	else
 	{
@@ -56,7 +57,7 @@ LogFileWriter::~LogFileWriter(void)
 bool LogFileWriter::Log(LogEntry entry)
 {
 	//TODO Async
-	logFile.Write(ToString(entry.timestamp) + " [" + entry.level + "] " + entry.message);
+	logFile.Write(entry.ToString());
 	logFile.Flush();
 
 	return true;
@@ -64,3 +65,4 @@ bool LogFileWriter::Log(LogEntry entry)
 
 } // logging
 } // klib
+
