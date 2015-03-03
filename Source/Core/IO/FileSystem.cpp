@@ -33,7 +33,7 @@ ArrayList<String> Path::Split(const String& path)
 
 bool File::Exists(const String& path)
 {
-	klib::io::BinaryFile file(path, std::ios::in);
+	klib::io::BinaryFile file(path, klib::io::FileModes::Read);
 	return file.IsOpen(); // destructor closes handle
 }
 

@@ -24,6 +24,19 @@ class ISerializable;
 namespace io
 {
 
+typedef Byte FileMode;
+
+enum FileModes : FileMode
+{
+	Read = 1, // (Default) Allow input operations, pointer at start (0)
+	Write = 2, // Allow output operations, preserve previous data, pointer at start (0)
+	Overwrite = 4, // Allow output operations, erase previous data, pointer at start (0)
+	Append = 8, // Allow output operations, preserve previous data, pointer at end of file
+	Binary = 16 // Open in binary mode
+
+	//Note: These can be mixed, i.e. (FileMode::Read | FileMode::Write), apart from Overwrite to Append, the rest are compatible
+};
+
 ///////////////////////////////////////////////////////////
 /// \namespace te::io
 /// \defgroup FileIO
@@ -59,7 +72,7 @@ public:
 	/// \return File opened successfully
 	///
 	///////////////////////////////////////////////////////////
-	virtual bool Open(String path, std::ios::openmode mode);
+	virtual bool Open(String path, FileMode mode = FileModes::Read);
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check to see if the file has been opened
@@ -164,7 +177,7 @@ public:
 	/// \return File openmode
 	///
 	///////////////////////////////////////////////////////////
-	std::ios::openmode GetMode();
+	FileMode GetMode() const { return mMode; }
 
 	///////////////////////////////////////////////////////////
 	/// \brief Get the fstream object
@@ -174,13 +187,13 @@ public:
 	/// \return file stream
 	///
 	///////////////////////////////////////////////////////////
-	std::fstream& GetStream();
+	std::fstream& GetStream() { return mStream; }
 
 protected:
 	bool mOpen;
 	String mPath;
 	std::fstream mStream;
-	std::ios::openmode mMode;
+	FileMode mMode;
 	UInt mSize;
 };
 ///////////////////////////////////////////////////////////
@@ -246,7 +259,7 @@ public:
 	/// \param mode ios::openmode to open file with (default is in/out)
 	///
 	///////////////////////////////////////////////////////////
-	TextFile(String path, std::ios::openmode mode); // Path constructor, tries to .Open, use .IsOpen to check success
+	TextFile(String path, FileMode mode = FileModes::Read); // Path constructor, tries to .Open, use .IsOpen to check success
 
 	///////////////////////////////////////////////////////////
 	/// \brief Read some characters
@@ -362,7 +375,7 @@ public:
 	/// \param mode ios::openmode to open file with (default is in/out)
 	///
 	///////////////////////////////////////////////////////////
-	BinaryFile(String path, std::ios::openmode mode)
+	BinaryFile(String path, FileMode mode = FileModes::Read)
 	{
 		Open(path, mode);
 	}
@@ -378,7 +391,7 @@ public:
 	/// \see FileBase::Open
 	///
 	///////////////////////////////////////////////////////////
-	bool Open(String path, std::ios::openmode mode) override;
+	bool Open(String path, FileMode mode = FileModes::Read) override;
 
 	////////////////////////////////////////////////////////////
     /// \brief Test the validity of the file, for reading

@@ -39,7 +39,7 @@ bool ErrorMessenger::Log(LogEntry entry)
 
 LogFileWriter::LogFileWriter(String logFileName)
 {
-	if (logFile.Open(logFileName, std::ios::app))
+	if (logFile.Open(logFileName, klib::io::FileModes::Append))
 	{
 		logFile.Seek(logFile.GetSize());
 	}

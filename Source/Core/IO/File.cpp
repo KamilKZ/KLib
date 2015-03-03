@@ -10,6 +10,22 @@ namespace klib
 namespace io
 {
 
+namespace priv
+{
+std::ios::openmode TranslateFileMode(FileMode mode)
+{
+	std::ios::openmode openmode;
+
+	if (mode && FileModes::Read > 0) { openmode |= std::ios::in; }
+	if (mode && FileModes::Overwrite > 0) { openmode |= ( std::ios::out | std::ios::trunc ); }
+	if (mode && FileModes::Write > 0) { openmode |= std::ios::out; }
+	if (mode && FileModes::Append > 0) { openmode |= ( std::ios::out | std::ios::app ); }
+	if (mode && FileModes::Binary > 0) { openmode |= std::ios::binary; }
+
+	return openmode;
+}
+}
+
 ////////////////////////////////////////////////////////////
 /// FileBase
 ////////////////////////////////////////////////////////////
@@ -20,9 +36,11 @@ FileBase::~FileBase()
 		Close();
 }
 
-bool FileBase::Open(String path, std::ios::openmode mode)
+bool FileBase::Open(String path, FileMode mode)
 {
-	mStream.open(path, mode);
+	std::ios::openmode mode_translated = priv::TranslateFileMode(mode);
+
+	mStream.open(path, mode_translated);
 	mOpen = mStream.is_open();
 	mMode = mode;
 
@@ -90,21 +108,11 @@ bool FileBase::IsEndOfFile()
 			(Tell() == (Int)(mStream.end));
 }
 
-std::ios::openmode FileBase::GetMode()
-{
-	return mMode;
-}
-
-std::fstream& FileBase::GetStream()
-{
-	return mStream;
-}
-
 ////////////////////////////////////////////////////////////
 /// TextFile
 ////////////////////////////////////////////////////////////
 
-TextFile::TextFile(String path, std::ios::openmode mode)
+TextFile::TextFile(String path, FileMode mode)
 {
 	Open(path, mode);
 }
@@ -149,9 +157,9 @@ bool TextFile::Write(const String& data)
 /// BinaryFile
 ////////////////////////////////////////////////////////////
 
-bool BinaryFile::Open(String path, std::ios::openmode mode)
+bool BinaryFile::Open(String path, FileMode mode)
 {
-	return FileBase::Open(path, (mode | std::ios::binary));
+	return FileBase::Open(path, ( mode | FileModes::Binary ));
 }
 
 BinaryFile::operator bool() const
