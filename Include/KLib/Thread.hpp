@@ -1,9 +1,10 @@
 #pragma once
 
-#include <thread>
 #include <atomic>
 
-#include <KLib/Exports.hpp>
+#include <KLib/Config.hpp>
+#include <KLib/String.hpp> // ::ToHexString
+#include <KLib/Logging.hpp>
 #include <KLib/Threading.hpp> //convenience & to avoid #include thread, threading
 
 namespace klib
@@ -19,7 +20,7 @@ public:
 	/// a wrapper for one. (C++11)
 	///
 	///////////////////////////////////////////////////////////
-	Thread();
+	Thread() : mRunning(false), mDetached(false) {};
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Default Destructor
@@ -27,7 +28,15 @@ public:
 	/// Gracefully stops a thread, detaching it if's still running
 	///
 	///////////////////////////////////////////////////////////
-	virtual ~Thread();
+	virtual ~Thread()
+	{
+		if (mRunning)
+		{
+			mRunning = false;
+			if (!mDetached)
+				Detach();
+		}
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Start the thread
@@ -41,7 +50,24 @@ public:
 	/// \see Thread::Run
 	///
 	///////////////////////////////////////////////////////////
-	bool Start();
+	inline bool Start()
+	{
+		if (mRunning)
+		{
+			KL_WARNING("Attempted to Start() a Thread which is already running");
+
+			return false;
+		}
+		else
+		{
+			mRunning = true;
+			mThread = std::thread(&Thread::Run, this);
+
+			KL_WARNING("Thread", "Created a new thread (" + ToHexString(mThread.get_id().hash()) + ")");
+
+			return true;
+		}
+	}
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Stop the thread
@@ -53,7 +79,26 @@ public:
 	/// \param immediate Stop thread immediately or leave to exit
 	///
 	///////////////////////////////////////////////////////////
-	void Stop(bool immediate = false);
+	inline void Stop(bool immediate = false)
+	{
+		if (mRunning)
+		{
+			mRunning = false;
+
+			if (immediate)
+			{
+				Detach();
+			}
+			else
+			{
+				Join();
+			}
+		}
+		else
+		{
+			KL_WARNING("Attempted to Stop() a Thread which isn't running");
+		}
+	}
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Join thread to the thread it was created on
@@ -64,7 +109,17 @@ public:
 	/// \return Joined
 	///
 	///////////////////////////////////////////////////////////
-	bool Join();
+	inline bool Join()
+	{
+		if (mRunning)
+		{
+			mThread.join();
+			mDetached = false;
+			return true;
+		}
+		return false;
+	}
+
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Detach a thread
@@ -75,7 +130,16 @@ public:
 	/// \return Detached
 	///
 	///////////////////////////////////////////////////////////
-	bool Detach();
+	inline bool Detach()
+	{
+		if (mRunning && !mDetached)
+		{
+			mThread.detach();
+			mDetached = true;
+			return true;
+		}
+		return false;
+	}
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Get the thread id as a std::thread::id
@@ -83,7 +147,10 @@ public:
 	/// \return Thread ID
 	///
 	///////////////////////////////////////////////////////////
-	std::thread::id GetThreadID();
+	inline std::thread::id GetThreadID() const
+	{
+		return mThread.get_id();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check if thread is running
@@ -91,7 +158,10 @@ public:
 	/// \return Running
 	///
 	///////////////////////////////////////////////////////////
-	bool IsRunning(void) const { return mRunning; }
+	bool IsRunning(void) const
+	{
+		return mRunning;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Thread entry-point/Thread function

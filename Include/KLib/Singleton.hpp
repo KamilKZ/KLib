@@ -1,6 +1,6 @@
 #pragma once
 
-#include <KLib/Exports.hpp>
+#include <KLib/Config.hpp>
 #include <KLib/String.hpp>
 #include <KLib/Logging.hpp>
 
@@ -65,7 +65,7 @@ public:
 	///
 	/// \return Singleton instance
 	/////////////////////////////////////////////////
-	static T* Get()
+	inline static T* Get()
 	{
 		if (pInstance == nullptr)
 		{

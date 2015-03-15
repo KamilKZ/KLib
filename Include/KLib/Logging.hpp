@@ -2,7 +2,7 @@
 
 //TODO thread safe (dont allow logging as well as adding new listeners etc.)
 
-#include <KLib/Exports.hpp>
+#include <KLib/Config.hpp>
 #include <KLib/Number.hpp>
 #include <KLib/String.hpp>
 #include <KLib/Memory.hpp>

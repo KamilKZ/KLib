@@ -2,20 +2,23 @@
 
 #include <iostream>
 
-#include <KLib/Exports.hpp>
+#include <KLib/Config.hpp>
 #include <KLib/ArrayList.hpp>
 #include <KLib/Number.hpp>
 #include <KLib/String.hpp>
 #include <KLib/Logging.hpp>
+#include <KLib/ISerializable.hpp>
+#include <KLib/ByteBuffer.hpp> // ByteBuffer, buffering for String
+#include <KLib/File.hpp>
 
 namespace klib
 {
 namespace io
 {
 
-class ByteBuffer; // Forward declaration
-class BinaryFile;
-class ISerializable;
+//class ByteBuffer; // Forward declaration
+//class BinaryFile;
+//class ISerializable;
 
 class API_EXPORT BinaryStream
 {
@@ -27,7 +30,10 @@ public:
 	/// and raises an error.
 	///
 	///////////////////////////////////////////////////////////
-	BinaryStream();
+	BinaryStream()
+	{
+		KL_ERROR("BinaryStream initialized wrong");
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief iostream Constructor
@@ -35,7 +41,11 @@ public:
 	/// Creates a BinaryStream layer on top of a std::iostream
 	///
 	///////////////////////////////////////////////////////////
-	BinaryStream(std::iostream* baseStream);
+	BinaryStream(std::iostream* baseStream)
+	{
+		mStream = baseStream;
+		mMode = ( io::FileModes::Read | io::FileModes::Write );
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief BinaryFile Constructor
@@ -46,7 +56,11 @@ public:
 	/// file's openmode
 	///
 	///////////////////////////////////////////////////////////
-	BinaryStream(BinaryFile& file);
+	BinaryStream(BinaryFile& file)
+	{
+		mStream = &file.GetStream();
+		mMode = file.GetMode();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Default Destructor
@@ -54,7 +68,7 @@ public:
 	/// <nothing>
 	///
 	///////////////////////////////////////////////////////////
-	~BinaryStream();
+	~BinaryStream() {};
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Get the size of the stream
@@ -65,7 +79,15 @@ public:
 	/// \return stream size in bytes
 	///
 	///////////////////////////////////////////////////////////
-	UInt GetSize();
+	inline UInt GetSize()
+	{
+		KL_ASSERT(( mMode & io::FileModes::Read ) > 0);
+		UInt pos = Tell(); // store current pos to restore
+		Seek(0, std::ios::end); // go to end of file
+		UInt length = Tell(); // retrieve pos at end
+		Seek(pos); // restore last position
+		return length;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check to see if the stream is good
@@ -87,7 +109,10 @@ public:
 	/// \return healthy
 	///
 	///////////////////////////////////////////////////////////
-	bool IsHealthy() const;
+	inline bool IsHealthy() const
+	{
+		return mStream->rdstate() == std::ios::goodbit;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Move pointer to a new position
@@ -98,7 +123,11 @@ public:
 	/// \return stream healthy
 	///
 	///////////////////////////////////////////////////////////
-	bool Seek(UInt pos, std::ios::seekdir way = std::ios::beg);
+	inline bool Seek(UInt pos, std::ios::seekdir way = std::ios::beg)
+	{
+		mStream->seekg(pos, way);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Skip pointer
@@ -108,7 +137,11 @@ public:
 	/// \return stream healthy
 	///
 	///////////////////////////////////////////////////////////
-	bool Skip(Int amount);
+	inline bool Skip(Int amount)
+	{
+		mStream->seekg(amount, std::ios_base::cur);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Returns the current position of the pointer
@@ -116,7 +149,10 @@ public:
 	/// \return Position of pointer
 	///
 	///////////////////////////////////////////////////////////
-	UInt Tell() const;
+	inline UInt Tell() const
+	{
+		return mStream->tellg();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check if the reading position reached the end of the stream
@@ -127,7 +163,12 @@ public:
 	/// \return True if all data was read, false otherwise
 	///
 	///////////////////////////////////////////////////////////
-	bool IsEnd() const;
+	inline bool IsEnd() const
+	{
+		KL_ASSERT(( mMode & io::FileModes::Read ) > 0);
+		return ( mStream->rdstate() == std::ios::eofbit ) ||
+			( Tell() == (UInt)(mStream->end) );
+	}
 	
 	////////////////////////////////////////////////////////////
     /// \brief Test the validity of the stream, for reading
@@ -163,7 +204,10 @@ public:
     /// \see IsHealthy
     ///
     ////////////////////////////////////////////////////////////
-	operator bool() const;
+	inline operator bool() const
+	{
+		return IsHealthy();
+	}
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Read raw bytes
@@ -177,7 +221,12 @@ public:
 	/// \return success
 	///
 	///////////////////////////////////////////////////////////
-	bool Read(char* buffer, UInt bytes);
+	inline bool Read(char* buffer, UInt bytes)
+	{
+		KL_ASSERT(( mMode & io::FileModes::Read ) > 0);
+		mStream->read(buffer, bytes);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Write raw bytes
@@ -191,7 +240,12 @@ public:
 	/// \return success
 	///
 	///////////////////////////////////////////////////////////
-	bool Write(const char* data, UInt bytes);
+	inline bool Write(const char* data, UInt bytes)
+	{
+		KL_ASSERT(( mMode & io::FileModes::Write ) > 0);
+		mStream->write(data, bytes);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Read from stream
@@ -214,10 +268,10 @@ public:
 	///
 	///////////////////////////////////////////////////////////
 	template<typename T = String>
-	BinaryStream& operator>>(T& data) // Read Type
+	inline BinaryStream& operator>>(T& data) // Read Type
 	{
 		// Make sure we can read
-		KL_ASSERT((mMode & std::ios::in) > 0);
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
 		
 		// Then write basic type
 		Read((char*)&data, sizeof(T));
@@ -227,10 +281,10 @@ public:
 	}
 	
 	template<typename T, typename Array = ArrayList<T>>
-	BinaryStream& operator>>(Array& data)
+	inline BinaryStream& operator>>(Array& data)
 	{
 		// Make sure we can red
-		KL_ASSERT((mMode & std::ios::in) > 0);
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
 
 		// First read array size
 		UInt length;
@@ -249,12 +303,66 @@ public:
 	}
 
 	template<typename T = ByteBuffer>
-	BinaryStream& operator>>(ByteBuffer& data);
+	inline BinaryStream& operator>>(ByteBuffer& data)
+	{
+		// Make sure we can write
+		KL_ASSERT( mMode & io::FileModes::Read) > 0);
+
+		// First extract data length
+		UInt length = 0;
+		*this >> length;
+
+		data = ByteBuffer(length);
+
+		// Then insert data
+		if (length > 0)
+			Read(data, length);
+
+		return *this;
+	}
 
 	template<typename T = String>
-	BinaryStream& operator>>(String& data);
+	inline BinaryStream& operator>>(String& data)
+	{
+		// Make sure we can read
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+
+		// First extract string length
+		UInt length = 0;
+		*this >> length;
+
+		data.clear();
+
+		if (length > 0)
+		{
+			// Then extract characters
+			ByteBuffer buffer(length);
+			Read(buffer, length);
+			data.assign(buffer, length);
+		}
+
+		return *this;
+	}
 	
-	BinaryStream& operator>>(char* data);
+	inline BinaryStream& operator>>(char* data)
+	{
+		// Make sure we can read
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+
+		// Rirst extract length of data
+		UInt length = 0;
+		*this >> length;
+
+		// Then extract characters
+		if (length > 0)
+		{
+			Read(data, length);
+			data[length] = '\0';
+		}
+
+		// Return self, because stream
+		return *this;
+	}
 	
 	///////////////////////////////////////////////////////////
 	/// \brief Write to stream
@@ -278,10 +386,10 @@ public:
 	///
 	///////////////////////////////////////////////////////////
 	template<typename T>
-	BinaryStream& operator<<(const T& data) // Write Type
+	inline BinaryStream& operator<<(const T& data) // Write Type
 	{
 		// Make sure we can write
-		KL_ASSERT((mMode & std::ios::out) > 0);
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
 		
 		// Write raw bytes from 'T data'
 		Write((char*)&data, sizeof(T));
@@ -291,10 +399,10 @@ public:
 	}
 	
 	template<typename T, typename Array = ArrayList<T>>
-	BinaryStream& operator<<(const Array& data)
+	inline BinaryStream& operator<<(const Array& data)
 	{
 		// Make sure we can write
-		KL_ASSERT((mMode & std::ios::out) > 0);
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
 
 		// First write array size
 		UInt length = static_cast<UInt>(data.size());
@@ -310,12 +418,54 @@ public:
 	}
 
 	template<typename T = ByteBuffer>
-	BinaryStream& operator<<(const ByteBuffer& data);
+	inline BinaryStream& operator<<(const ByteBuffer& data)
+	{
+		// Make sure we can write
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+
+		// First insert data length
+		UInt length = static_cast<UInt>( data.GetSize() );
+		*this << length;
+
+		// Then insert data
+		if (length > 0)
+			Write(data, length);
+
+		return *this;
+	}
 
 	template<typename T = String>
-	BinaryStream& operator<<(const String& data);
+	inline BinaryStream& operator<<(const String& data)
+	{
+		// Make sure we can write
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+
+		// First insert string length
+		UInt length = static_cast<UInt>( data.size() );
+		*this << length;
+
+		// Then insert characters
+		if (length > 0)
+			Write(data.c_str(), length * sizeof(String::value_type));
+
+		return *this;
+	}
 	
-	BinaryStream& operator<<(const char* data);
+	inline BinaryStream& operator<<(const char* data)
+	{
+		// Make sure we can write
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+
+		// First insert string length
+		UInt length = std::strlen(data);
+		*this << length;
+
+		// Then insert characters
+		if (length > 0)
+			Write(data, length * sizeof(char));
+
+		return *this;
+	}
 
 protected:
 	std::iostream* mStream;

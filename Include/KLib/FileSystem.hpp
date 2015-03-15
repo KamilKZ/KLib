@@ -1,6 +1,6 @@
 #pragma once
 
-#include <KLib/Exports.hpp>
+#include <KLib/Config.hpp>
 #include <KLib/String.hpp>
 
 namespace klib

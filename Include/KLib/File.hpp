@@ -1,11 +1,15 @@
 #pragma once
 
+#include <iostream>
 #include <fstream>
 
-#include <KLib/Exports.hpp>
+#include <KLib/Config.hpp>
 #include <KLib/ArrayList.hpp>
 #include <KLib/Number.hpp>
 #include <KLib/String.hpp>
+#include <KLib/ISerializable.hpp>
+#include <KLib/ByteBuffer.hpp>
+#include <KLib/Logging.hpp>
 
 
 ///Todo
@@ -37,6 +41,22 @@ enum FileModes : FileMode
 	//Note: These can be mixed, i.e. (FileMode::Read | FileMode::Write), apart from Overwrite to Append, the rest are compatible
 };
 
+namespace priv
+{
+std::ios::openmode TranslateFileMode(FileMode mode)
+{
+	std::ios::openmode openmode;
+
+	if (mode && FileModes::Read > 0) { openmode |= std::ios::in; }
+	if (mode && FileModes::Overwrite > 0) { openmode |= ( std::ios::out | std::ios::trunc ); }
+	if (mode && FileModes::Write > 0) { openmode |= std::ios::out; }
+	if (mode && FileModes::Append > 0) { openmode |= ( std::ios::out | std::ios::app ); }
+	if (mode && FileModes::Binary > 0) { openmode |= std::ios::binary; }
+
+	return openmode;
+}
+}
+
 ///////////////////////////////////////////////////////////
 /// \namespace te::io
 /// \defgroup FileIO
@@ -49,7 +69,11 @@ enum FileModes : FileMode
 class API_EXPORT FileBase
 {
 public:
-	virtual ~FileBase();
+	virtual ~FileBase()
+	{
+		if (IsOpen())
+			Close();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Open a new file
@@ -72,7 +96,19 @@ public:
 	/// \return File opened successfully
 	///
 	///////////////////////////////////////////////////////////
-	virtual bool Open(String path, FileMode mode = FileModes::Read);
+	virtual inline bool Open(String path, FileMode mode = FileModes::Read)
+	{
+		std::ios::openmode mode_translated = priv::TranslateFileMode(mode);
+
+		mStream.open(path, mode_translated);
+		mOpen = mStream.is_open();
+		mMode = mode;
+
+		if (!mOpen)
+			KL_WARNING("Failed to open file '" + path + "'");
+
+		return mOpen;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check to see if the file has been opened
@@ -80,7 +116,10 @@ public:
 	/// \return File opened successfully
 	///
 	///////////////////////////////////////////////////////////
-	bool IsOpen() const;
+	inline bool IsOpen() const
+	{
+		return mOpen;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Close the file
@@ -89,13 +128,23 @@ public:
 	/// open for output.
 	///
 	///////////////////////////////////////////////////////////
-	void Close();
+	inline void Close()
+	{
+		if (( mMode & std::ios::out ) > 0)
+			Flush();
+
+		mStream.close();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Push any changes to and save the file
 	///
 	///////////////////////////////////////////////////////////
-	void Flush();
+	inline void Flush()
+	{
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+		mStream.flush();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Get the size of the file
@@ -106,7 +155,15 @@ public:
 	/// \return file size in bytes
 	///
 	///////////////////////////////////////////////////////////
-	UInt GetSize();
+	inline UInt GetSize()
+	{
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+		UInt pos = Tell(); // store current pos to restore
+		Seek(0, std::ios::end); // go to end of file
+		UInt length = Tell(); // retrieve pos at end
+		Seek(pos); // restore last position
+		return length;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check to see if the file is good
@@ -127,7 +184,10 @@ public:
 	/// \return healthy
 	///
 	///////////////////////////////////////////////////////////
-	bool IsHealthy() const;
+	inline bool IsHealthy() const
+	{
+		return mStream.rdstate() == std::ios::goodbit;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Move pointer to a new position
@@ -138,7 +198,11 @@ public:
 	/// \return file healthy
 	///
 	///////////////////////////////////////////////////////////
-	bool Seek(UInt pos, std::ios::seekdir way = std::ios::beg);
+	inline bool Seek(UInt pos, std::ios::seekdir way = std::ios::beg)
+	{
+		mStream.seekg(pos, way);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Skip pointer
@@ -148,7 +212,11 @@ public:
 	/// \return file healthy
 	///
 	///////////////////////////////////////////////////////////
-	bool Skip(Int amount);
+	inline bool Skip(Int amount)
+	{
+		mStream.seekg(amount, std::ios_base::cur);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Returns the current position of the pointer
@@ -156,7 +224,10 @@ public:
 	/// \return Position of pointer
 	///
 	///////////////////////////////////////////////////////////
-	UInt Tell();
+	inline UInt Tell()
+	{
+		return mStream.tellg();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Check if the reading position reached the end of the file
@@ -167,7 +238,12 @@ public:
 	/// \return True if all data was read, false otherwise
 	///
 	///////////////////////////////////////////////////////////
-	bool IsEndOfFile();
+	inline bool IsEndOfFile()
+	{
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+		return ( mStream.rdstate() == std::ios::eofbit ) ||
+			( Tell() == (Int)(mStream.end) );
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Get the openmode
@@ -177,7 +253,10 @@ public:
 	/// \return File openmode
 	///
 	///////////////////////////////////////////////////////////
-	FileMode GetMode() const { return mMode; }
+	inline FileMode GetMode() const
+	{
+		return mMode;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Get the fstream object
@@ -187,7 +266,10 @@ public:
 	/// \return file stream
 	///
 	///////////////////////////////////////////////////////////
-	std::fstream& GetStream() { return mStream; }
+	inline std::fstream& GetStream()
+	{
+		return mStream;
+	}
 
 protected:
 	bool mOpen;
@@ -259,7 +341,10 @@ public:
 	/// \param mode ios::openmode to open file with (default is in/out)
 	///
 	///////////////////////////////////////////////////////////
-	TextFile(String path, FileMode mode = FileModes::Read); // Path constructor, tries to .Open, use .IsOpen to check success
+	TextFile(String path, FileMode mode = FileModes::Read)
+	{
+		Open(path, mode);
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Read some characters
@@ -272,7 +357,15 @@ public:
 	/// \return Characters as a String
 	///
 	///////////////////////////////////////////////////////////
-	String Read(UInt size);
+	inline String Read(UInt size)
+	{
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+		char* data = new char[size];
+		mStream.read(data, size);
+		String strData(data);
+		SAFE_DELETE_ARRAY(data);
+		return strData;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Reads a line
@@ -284,7 +377,13 @@ public:
 	/// \return Line as a String
 	///
 	///////////////////////////////////////////////////////////
-	String ReadLine();
+	inline String ReadLine()
+	{
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+		String str;
+		std::getline(mStream, str);
+		return str;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Read whole of the file
@@ -294,7 +393,16 @@ public:
 	/// \return File contents as a String
 	///
 	///////////////////////////////////////////////////////////
-	String ReadAll();
+	inline String ReadAll()
+	{
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+		String str;
+		str.reserve(GetSize());
+		str.assign(std::istreambuf_iterator<char>(mStream),
+				   std::istreambuf_iterator<char>());
+
+		return str;
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Write to file
@@ -304,7 +412,29 @@ public:
 	/// \return File healthy (write successful)
 	///
 	///////////////////////////////////////////////////////////
-	bool Write(const String& data);
+	inline bool Write(const String& data)
+	{
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+		mStream << data;
+		return IsHealthy();
+	}
+
+	///////////////////////////////////////////////////////////
+	/// \brief Write a line to file
+	///
+	/// Writes a line at the position of the pointer.
+	///
+	/// Same as Write() but includes a linebreak at the end of the string.
+	///
+	/// \return File healthy (write successful)
+	///
+	///////////////////////////////////////////////////////////
+	inline bool WriteLine(const String& data)
+	{
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+		mStream << data << '\r\n';
+		return IsHealthy();
+	}
 };
 ///////////////////////////////////////////////////////////
 /// \class TextFile
@@ -318,6 +448,8 @@ public:
 /// file.ReadLine();
 /// file.ReadAll();
 /// file.Write(output);
+/// foreach(list as line)
+///     file.WriteLine(line);
 /// \endcode
 ///
 /// \see FileBase
@@ -391,7 +523,10 @@ public:
 	/// \see FileBase::Open
 	///
 	///////////////////////////////////////////////////////////
-	bool Open(String path, FileMode mode = FileModes::Read) override;
+	inline bool Open(String path, FileMode mode = FileModes::Read) override
+	{
+		return FileBase::Open(path, ( mode | FileModes::Binary ));
+	}
 
 	////////////////////////////////////////////////////////////
     /// \brief Test the validity of the file, for reading
@@ -427,7 +562,10 @@ public:
     /// \see IsEOF
     ///
     ////////////////////////////////////////////////////////////
-	operator bool() const;
+	inline operator bool() const
+	{
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Read raw bytes
@@ -441,7 +579,12 @@ public:
 	/// \return success
 	///
 	///////////////////////////////////////////////////////////
-	bool Read(char* buffer, UInt bytes);
+	inline bool Read(char* buffer, UInt bytes)
+	{
+		KL_ASSERT((mMode & io::FileModes::Read) > 0);
+		mStream.read(buffer, bytes);
+		return IsHealthy();
+	}
 
 	///////////////////////////////////////////////////////////
 	/// \brief Write raw bytes
@@ -455,7 +598,12 @@ public:
 	/// \return success
 	///
 	///////////////////////////////////////////////////////////
-	bool Write(const char* data, UInt bytes);
+	inline bool Write(const char* data, UInt bytes)
+	{
+		KL_ASSERT((mMode & io::FileModes::Write) > 0);
+		mStream.write(data, bytes);
+		return IsHealthy();
+	}
 	
 };
 ///////////////////////////////////////////////////////////

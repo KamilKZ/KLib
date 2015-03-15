@@ -1,5 +1,6 @@
 #pragma once
 
+#include <KLib/Config.hpp>
 #include <KLib/Number.hpp>
 
 namespace klib
@@ -7,7 +8,7 @@ namespace klib
 namespace io
 {
 
-class ByteBuffer
+class API_EXPORT ByteBuffer
 {
 public:
 	///////////////////////////////////////////////////////////
@@ -51,7 +52,7 @@ public:
 	/// \return char* Pointer to buffer
 	///
 	///////////////////////////////////////////////////////////
-	operator char*( ) const
+	inline operator char*() const
 	{
 		return mData;
 	}
@@ -62,7 +63,7 @@ public:
 	/// \return Size of buffer in bytes
 	///
 	///////////////////////////////////////////////////////////
-	ULong GetSize() const
+	inline ULong GetSize() const
 	{
 		return mSize;
 	}
